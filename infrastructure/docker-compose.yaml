@@ -1,0 +1,175 @@
+services:
+  caddy:
+    image: lucaslorentz/caddy-docker-proxy:ci-alpine
+    container_name: caddy
+    ports:
+      - 80:80
+      - 8443:8443
+    labels:
+      caddy.https_port: 8443
+    environment:
+      - CADDY_INGRESS_NETWORKS=caddy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - caddy_data:/data
+      - shared_volume:/var/www/
+    restart: unless-stopped
+    networks:
+      caddy:
+        aliases:
+          - vsign.localdev.me
+          - vaip.localdev.me
+          - minio.localdev.me
+          - web.minio.localdev.me
+          - elastic.localdev.me
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib
+    container_name: otel-collector
+    profiles: ["monitor"]
+    volumes:
+      - ./config/otel-collector.yaml:/etc/otelcol-contrib/config.yaml
+    restart: always
+    networks:
+      - caddy
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    profiles: ["monitor"]
+    volumes:
+      - ./config/prometheus.yaml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    networks:
+      - caddy
+    labels:
+      caddy: prometheus.localdev.me
+      caddy.tls: internal
+      caddy.reverse_proxy: "prometheus:9090"
+    restart: always
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: jaeger
+    profiles: ["monitor"]
+    command:
+      - "--badger.ephemeral=false"
+      - "--badger.directory-key=/badger/data/keys"
+      - "--badger.directory-value=/badger/data/values"
+    environment:
+      - SPAN_STORAGE_TYPE=badger
+    volumes:
+      - jaeger_data:/badger:rw
+    depends_on:
+      prepare-data-dir:
+        condition: service_completed_successfully
+    networks:
+      - caddy
+    labels:
+      caddy: jaeger.localdev.me
+      caddy.tls: internal
+      caddy.reverse_proxy: "jaeger:16686"
+    restart: always
+
+  prepare-data-dir:
+    image: alpine
+    profiles: ["monitor"]
+    command: "chmod -R 777 /badger"
+    volumes:
+      - jaeger_data:/badger
+
+  loki:
+    image: grafana/loki:latest
+    container_name: loki
+    profiles: ["monitor"]
+    volumes:
+      - loki_data:/loki
+      - ./config/loki.yaml:/etc/loki/loki-config.yaml
+    networks:
+      - caddy
+    labels:
+      caddy: loki.localdev.me
+      caddy.tls: internal
+      caddy.reverse_proxy: "loki:3100"
+    restart: always
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: grafana
+    profiles: ["monitor"]
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_DASHBOARDS_JSON_PATH=/etc/grafana/provisioning/dashboards
+    volumes:
+      - ./config/datasources:/etc/grafana/provisioning/datasources
+      - grafana_data:/var/lib/grafana
+    restart: always
+    networks:
+      - caddy
+    labels:
+      caddy: grafana.localdev.me
+      caddy.tls: internal
+      caddy.reverse_proxy: "grafana:3000"
+
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minio_admin
+      MINIO_ROOT_PASSWORD: minio_admin
+    volumes:
+      - minio_data:/data
+    networks:
+      - caddy
+    labels:
+      caddy_1: minio.localdev.me
+      caddy_1.tls: internal
+      caddy_1.reverse_proxy: "minio:9000"
+      caddy_2: web.minio.localdev.me
+      caddy_2.tls: internal
+      caddy_2.reverse_proxy: "minio:9001"
+
+  email:
+    image: rnwood/smtp4dev
+    init: true
+    restart: on-failure
+    volumes:
+      - smtp_data:/smtp4dev
+    networks:
+      - caddy
+    labels:
+      caddy: email.localdev.me
+      caddy.tls: internal
+      caddy.reverse_proxy: "email:80"
+
+  createbuckets:
+    image: minio/mc
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      sleep 5;
+      /usr/bin/mc config host add myminio http://minio:9000 minio_admin minio_admin;
+      /usr/bin/mc mb myminio/attachments --ignore-existing;
+      /usr/bin/mc policy set download myminio/attachments;
+      exit 0;
+      "
+    networks:
+      - caddy
+
+volumes:
+  caddy_data: {}
+  grafana_data: {}
+  prometheus_data: {}
+  jaeger_data: {}
+  loki_data: {}
+  minio_data: {}
+  shared_volume:
+    name: shared_volume
+  smtp_data: {}
+networks:
+  caddy:
+    name: caddy
+    driver: bridge

@@ -1,0 +1,372 @@
+{
+    "openapi": "3.0.0",
+    "info": {
+        "title": "VSign API",
+        "version": "1.0.0"
+    },
+    "servers": [
+        {
+            "url": "/api/v1/"
+        }
+    ],
+    "paths": {
+        "/auth/github/redirect": {
+            "get": {
+                "tags": [
+                    "Authentication"
+                ],
+                "summary": "Redirect to GitHub for authentication",
+                "description": "Redirects the user to GitHub for authentication.",
+                "operationId": "redirectToGithub",
+                "responses": {
+                    "302": {
+                        "description": "Redirect to GitHub"
+                    }
+                }
+            }
+        },
+        "/user": {
+            "get": {
+                "tags": [
+                    "Authentication"
+                ],
+                "summary": "Get authenticated user",
+                "description": "Returns the currently authenticated user.",
+                "operationId": "getUser",
+                "responses": {
+                    "200": {
+                        "description": "Successful operation",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/User"
+                                }
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthenticated"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/sign-request": {
+            "post": {
+                "tags": [
+                    "Document Signature"
+                ],
+                "summary": "Initialize a signature request",
+                "description": "Creates a signature request for a document.",
+                "operationId": "initializeSignature",
+                "requestBody": {
+                    "required": true,
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "$ref": "#/components/schemas/CreateSignatureRequest"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "201": {
+                        "description": "Signature request initialized",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/SignatureRequestResource"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Failed to initialize signature request"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/documents/to-sign": {
+            "get": {
+                "tags": [
+                    "Document Signature"
+                ],
+                "summary": "Get documents that need to be signed",
+                "operationId": "getDocumentsToSign",
+                "responses": {
+                    "200": {
+                        "description": "List of documents to be signed",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/DocumentCollection"
+                                }
+                            }
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/documents/{id}/sign": {
+            "post": {
+                "tags": [
+                    "Document Signature"
+                ],
+                "summary": "Sign a document",
+                "operationId": "signDocument",
+                "parameters": [
+                    {
+                        "name": "id",
+                        "in": "path",
+                        "description": "ID of the document to sign",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Document signing process started"
+                    }
+                },
+                "security": [
+                    {
+                        "bearerAuth": []
+                    }
+                ]
+            }
+        },
+        "/public-key": {
+            "get": {
+                "tags": [
+                    "Public Key"
+                ],
+                "summary": "Get the public key",
+                "operationId": "f3ab70b4e1a3ce908a65a315f28e3dac",
+                "responses": {
+                    "200": {
+                        "description": "Successfully retrieved public key",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "data": {
+                                            "properties": {
+                                                "id": {
+                                                    "type": "integer",
+                                                    "example": 1
+                                                },
+                                                "key": {
+                                                    "type": "string",
+                                                    "example": "-----BEGIN PUBLIC KEY-----...-----END PUBLIC KEY-----"
+                                                }
+                                            },
+                                            "type": "object"
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Public keys are temporarily unavailable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "properties": {
+                                        "message": {
+                                            "type": "string",
+                                            "example": "Public keys are temporarily unavailable."
+                                        }
+                                    },
+                                    "type": "object"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "components": {
+        "schemas": {
+            "Document": {
+                "required": [
+                    "id",
+                    "path",
+                    "original_filename",
+                    "mime_type",
+                    "size",
+                    "hash"
+                ],
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "example": 1
+                    },
+                    "path": {
+                        "type": "string",
+                        "example": "/documents/file.pdf"
+                    },
+                    "original_filename": {
+                        "type": "string",
+                        "example": "contract.pdf"
+                    },
+                    "mime_type": {
+                        "type": "string",
+                        "example": "application/pdf"
+                    },
+                    "size": {
+                        "type": "integer",
+                        "example": 102400
+                    },
+                    "hash": {
+                        "type": "string",
+                        "example": "d41d8cd98f00b204e9800998ecf8427e"
+                    }
+                },
+                "type": "object"
+            },
+            "User": {
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "example": 1
+                    },
+                    "name": {
+                        "type": "string",
+                        "example": "John Doe"
+                    },
+                    "email": {
+                        "type": "string",
+                        "example": "john.doe@example.com"
+                    },
+                    "github_id": {
+                        "type": "string",
+                        "example": "123456"
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "example": "2023-10-01T12:00:00Z"
+                    },
+                    "updated_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "example": "2023-10-01T12:00:00Z"
+                    }
+                },
+                "type": "object"
+            },
+            "CreateSignatureRequest": {
+                "required": [
+                    "document"
+                ],
+                "properties": {
+                    "document": {
+                        "description": "PDF file to be signed",
+                        "type": "string",
+                        "format": "binary"
+                    }
+                },
+                "type": "object"
+            },
+            "DocumentCollection": {
+                "type": "array",
+                "items": {
+                    "$ref": "#/components/schemas/DocumentResource"
+                }
+            },
+            "DocumentResource": {
+                "required": [
+                    "id",
+                    "title",
+                    "size",
+                    "path",
+                    "createdAt"
+                ],
+                "properties": {
+                    "id": {
+                        "type": "integer",
+                        "example": 1
+                    },
+                    "title": {
+                        "type": "string",
+                        "example": "contract.pdf"
+                    },
+                    "size": {
+                        "type": "integer",
+                        "example": 102400
+                    },
+                    "path": {
+                        "type": "string",
+                        "example": "/documents/file.pdf"
+                    },
+                    "createdAt": {
+                        "type": "string",
+                        "format": "date-time",
+                        "example": "2024-03-21T12:00:00Z"
+                    }
+                },
+                "type": "object"
+            },
+            "SignatureRequestResource": {
+                "required": [
+                    "request_id",
+                    "status"
+                ],
+                "properties": {
+                    "request_id": {
+                        "type": "string",
+                        "example": "abc123"
+                    },
+                    "status": {
+                        "type": "string",
+                        "enum": [
+                            "pending",
+                            "completed"
+                        ],
+                        "example": "pending"
+                    }
+                },
+                "type": "object"
+            }
+        },
+        "securitySchemes": {
+            "bearerAuth": {
+                "type": "http",
+                "scheme": "bearer"
+            }
+        }
+    },
+    "tags": [
+        {
+            "name": "Authentication",
+            "description": "Operations related to authentication"
+        },
+        {
+            "name": "Document Signature",
+            "description": "Operations related to document signing"
+        },
+        {
+            "name": "Public Key",
+            "description": "Operations for Public Key Management"
+        }
+    ]
+}

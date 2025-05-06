@@ -1,0 +1,161 @@
+services:
+  vsign:
+    build:
+      context: ..
+      dockerfile: docker/vsign.dockerfile
+      target: vsign_final
+    image: vsign-image
+    container_name: vsign
+    volumes:
+      - shared_volume:/var/www/shared
+      - vsign_app_storage:/var/www/vsign/storage:rw
+    environment:
+      - OTEL_PHP_AUTOLOAD_ENABLED
+      - OTEL_SERVICE_NAME
+      - OTEL_SERVICE_NAMESPACE
+      - OTEL_DEPLOYMENT_ENVIRONMENT
+      - OTEL_TRACES_EXPORTER
+      - OTEL_METRICS_EXPORTER
+      - OTEL_LOGS_EXPORTER
+      - OTEL_EXPORTER_OTLP_PROTOCOL
+      - OTEL_EXPORTER_OTLP_ENDPOINT
+      - OTEL_PROPAGATORS
+    develop:
+      watch:
+        - action: rebuild
+          path: ../application
+          ignore:
+            - application/vendor
+        - action: rebuild
+          path: ../client
+          ignore:
+            - client/node_modules
+    networks:
+      - default
+      - caddy
+    labels:
+      caddy: vsign.localdev.me
+      caddy.tls: internal
+      caddy.@api: "path_regexp api/*"
+      caddy.@docs: "path_regexp docs/*"
+      caddy.handle_1: "@api"
+      caddy.handle_1.root: "* /var/www/vsign/public"
+      caddy.handle_1.php_fastcgi: vsign:9000
+      caddy.handle_1.rewrite: /api/(.*)/index.php/$1
+      caddy.handle_2.root: "* /var/www/vsign-client/dist"
+      caddy.handle_2.try_files: "{path} /index.html"
+      caddy.handle_2.file_server:
+      caddy.handle_3: "@docs"
+      caddy.handle_3.root: "* /var/www/vsign/public"
+      caddy.handle_3.php_fastcgi: vsign:9000
+      caddy.handle_3.rewrite: /api/(.*)/index.php/$1
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  composer:
+    build:
+      context: ..
+      dockerfile: docker/composer.dockerfile
+    working_dir: /var/www/vsign
+    volumes:
+      - ../application:/var/www/vsign
+
+  npm:
+    build:
+      context: ..
+      dockerfile: docker/npm.dockerfile
+    working_dir: /var/www/vsign-client
+    volumes:
+      - ../client:/var/www/vsign-client
+      - /var/www/vsign-client/node_modules/
+    entrypoint: ["npm"]
+
+  php:
+    build:
+      context: ..
+      dockerfile: docker/php.dockerfile
+    working_dir: /var/www/vsign
+    volumes:
+      - ../application:/var/www/vsign
+    depends_on:
+      - postgres
+    entrypoint: ["php"]
+
+  queue:
+    build:
+      context: ..
+      dockerfile: docker/vsign.dockerfile
+      additional_contexts:
+        app: docker-image://vsign
+    image: vsign-image
+    container_name: queue_worker
+    working_dir: /var/www/vsign
+    networks:
+      - default
+      - caddy
+    depends_on:
+      vsign:
+        condition: service_started
+      redis:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+    entrypoint: ["php", "artisan", "queue:work"]
+
+  postgres:
+    image: postgres:latest
+    container_name: postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER
+      - POSTGRES_PASSWORD
+      - POSTGRES_DB
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: valkey/valkey:7
+    container_name: redis
+    init: true
+    restart: on-failure
+    volumes:
+      - redis_data:/var/lib/redis/data
+    environment:
+      - REDIS_USER
+      - REDIS_PASSWORD
+    configs:
+      - source: redis.conf
+        target: /usr/local/etc/valkey/valkey.conf
+        uid: "0"
+        gid: "0"
+        mode: 0444
+    command: ["valkey-server", "/usr/local/etc/valkey/valkey.conf"]
+
+configs:
+  redis.conf:
+    content: |
+      appendonly yes
+      user default on nopass ~* &* +@read
+      user ${REDIS_USER} on >${REDIS_PASSWORD} ~* &* +@all
+
+networks:
+  caddy:
+    external: true
+
+volumes:
+  shared_volume:
+    external: true
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  vsign_app_storage:
+    driver: local
+  smtp_data:
+    driver: local
