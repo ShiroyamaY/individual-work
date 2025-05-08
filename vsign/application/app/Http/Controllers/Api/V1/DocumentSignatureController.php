@@ -59,7 +59,8 @@ readonly class DocumentSignatureController
         ], 202);
     }
 
-    public function signedDocumentsCount(): int {
+    public function signedDocumentsCount(): int
+    {
         return DocumentSignatureRequest::query()->where('status', 'completed')->count();
     }
 }
