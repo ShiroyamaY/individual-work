@@ -8,6 +8,6 @@ class UserController
 {
     public function getTotalUsers(): int
     {
-        return User::all()->count();
+        return User::count();
     }
 }
