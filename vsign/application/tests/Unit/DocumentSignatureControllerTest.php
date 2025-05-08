@@ -15,6 +15,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\UploadedFile;
 use PHPUnit\Framework\MockObject\Exception;
 use Tests\TestCase;
+use Illuminate\Http\Request;
 
 class DocumentSignatureControllerTest extends TestCase
 {
@@ -70,8 +71,9 @@ class DocumentSignatureControllerTest extends TestCase
         $documentSignatureService->method('getDocumentsToSign')->willReturn($documentCollection);
 
         $controller = new DocumentSignatureController($documentSignatureService);
-
-        $response = $controller->documentsToSign();
+        
+        $request = Request::create('/api/documents-to-sign', 'GET', ['filter' => '']);
+        $response = $controller->documentsToSign($request);
 
         $this->assertEquals($documentCollection->pluck('id'), $response->collection->pluck('id'));
     }
